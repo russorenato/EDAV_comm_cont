@@ -12,6 +12,8 @@ knitr::opts_chunk$set(echo = FALSE)
 ## The 3 big tasks behind analyzing textual Twitter data
 ### 1. Scrape data
 
+This is how you scrape data
+
 #### Packages needed
 
 #### Set up credentials
