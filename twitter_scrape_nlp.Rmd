@@ -11,16 +11,25 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ## The 3 big tasks behind analyzing textual Twitter data
 ### 1. Scrape data
+The first thing you should do is obtaining data. Fortunately, Twitter makes it 
+relatively easy to scrape data, all you need to start is a Twitter Developer
+Account so you can get access to Twitter API. Actually, there are a few different
+types of Developer Account. For the purpose of this project, I am using my 
+Academic Research account. You may want to check out [Twitter's Developer Portal](https://developer.twitter.com/)
+for more information.
+From this point on, I will assume that you have your Twitter API credentials at
+hand ;-)
 
-This is how you scrape data
-
-#### Packages needed
+#### Packages needed/recommended
+There are a few packages that help us retrieve data from Twitter. For this project,
+I am using [Academic twitteR](https://www.research.ed.ac.uk/en/publications/academictwitter-an-r-package-to-access-the-twitter-academic-resea)
 
 #### Set up credentials
 
 #### Search what you want
 
 ### 2. Prepare data
+#### Packages needed
 
 #### Remove stop words
 
@@ -31,7 +40,7 @@ This is how you scrape data
 #### Create DTM
 
 ### 3. Analyze data
-
+#### Packages needed
 #### Exploratory analysis
 
 #### Natural language processing

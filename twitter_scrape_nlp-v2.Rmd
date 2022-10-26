@@ -1,0 +1,130 @@
+---
+title: "Twitter textual data: scraping and analyzing"
+author: "Renato Russo"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## The 3 big tasks behind analyzing textual Twitter data
+### 1. Scrape data
+The first thing you should do is obtaining data. Fortunately, Twitter makes it 
+relatively easy to scrape data, all you need to start is a Twitter Developer
+Account so you can get access to Twitter API. Actually, there are a few different
+types of Developer Account. For the purpose of this project, I am using my 
+Academic Research account. You may want to check out [Twitter's Developer Portal](https://developer.twitter.com/)
+for more information.
+From this point on, I will assume that you have your Twitter API credentials at
+hand ;-)
+
+#### Packages needed/recommended
+There are a few packages that help us retrieve data from Twitter. For this project,
+I am using [academictwitteR](https://www.research.ed.ac.uk/en/publications/academictwitter-an-r-package-to-access-the-twitter-academic-resea),
+but you may also want to check out [twitteR](https://cran.r-project.org/web/packages/twitteR/twitteR.pdf)
+and [rtweet](https://cran.rstudio.com/web/packages/rtweet/index.html). I have already
+experienced a few glitches with the former, which seems to be updated less
+frequently than rtweet, and the reason why I am using academictwitteR now is because
+it has a more straight forward connection with Twitter API V2, which we can use
+to retrieve "historical data" (the previous API allowed retrieval of data from
+the past 8-10 days only, among other limitations).
+So, let's get on with the search:
+```{r}
+#install.packages("academictwitteR")
+library(academictwitteR)
+```
+#### Set up credentials
+For this step, you will have to look at your profile on Twitter's developer portal.
+Now, go ahead and get your credentials.
+With academictwitteR, I can use the Bearer Token only. The [API documentation](https://developer.twitter.com/en/docs/authentication/oauth-2-0/bearer-tokens)
+and the [package repository](https://github.com/cjbarrie/academictwitteR) have
+more information on that. For now, you have to call the function `set_bearer()` to
+store that information for future use.
+```{r}
+set_bearer()
+```
+Once you follow the instructions above, you are ready to go ahead and run your
+query!
+
+#### Search what you want
+Now, you're finally able to run the search. For that, you will use the
+`get_all_tweets()` function. In my case, I am interested in investigating how
+sectors of the alt-right have "highjacked" the expression "do your own research"
+to promote disinformation in many ways. Therefore, I will search for tweets
+containing that expression in a few days before and after the January 2021
+Capitol Attack, to assess whether people were using that expression to refer to
+different narratives related to that event.
+```{r}
+capitol_dyor <- get_all_tweets(query = "dyor", # search query
+                                   start_tweets = "2021-01-01T00:00:00Z", # search start date
+                                   end_tweets = "2021-01-11T00:00:00Z", # search end date
+                                   bearer_token = get_bearer(), # pulling stored bearer toke
+                                   data_path = "data", #where data is stored as series of JSON files
+                                   n = 10000, # total number of tweets retrieved
+                                   is_retweet = FALSE) # excluding retweets
+```
+The resulting object is composed by columns of lists (e.g., "referenced tweets"
+and character data (e.g., "text").
+
+### 2. Prepare data
+For this analysis, we will predominantly use the "text" column, that is, the 
+content of the actual tweet. We could use other data, for example number of likes,
+or the timeline of a user, but let's focus on the content for now.
+
+#### Packages needed
+```{r}
+library(tidytext)
+library(dplyr)
+```
+#### Cleaning the data
+The function below is used to remove capitalization, and to remove numbers and 
+punctuation:
+```{r}
+# First, we define the function
+clean_text <- function(text) {
+  text <- tolower(text)
+  text <- gsub("[[:digit:]]+", "", text)
+  text <- gsub("[[:punct:]]+", "", text)
+  return(text)
+}
+# Then, apply it to the text column:
+capitol_dyor$text <- clean_text(capitol_dyor$text)
+
+
+capitol_dyor$text <- capitol_dyor$text %>% 
+  anti_join(tidytext::get_stopwords())
+
+```
+We also want to remove stop words, that is, those that do not add meaning to
+textual analysis. Before doing that
+
+#### Tokenize words
+
+#### Create DTM
+
+### 3. Analyze data
+#### Packages needed
+#### Exploratory analysis
+
+#### Natural language processing
+
+##### Visualize topiccs
+
+##### Visualize co-occurring terms
+
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
