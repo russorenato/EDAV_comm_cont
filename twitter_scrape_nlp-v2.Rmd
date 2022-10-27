@@ -32,7 +32,7 @@ to retrieve "historical data" (the previous API allowed retrieval of data from
 the past 8-10 days only, among other limitations).
 So, let's get on with the search:
 ```{r}
-#install.packages("academictwitteR")
+install.packages("academictwitteR")
 library(academictwitteR)
 ```
 #### Set up credentials
@@ -64,10 +64,24 @@ capitol_dyor <- get_all_tweets(query = "dyor", # search query
                                    data_path = "data", #where data is stored as series of JSON files
                                    n = 10000, # total number of tweets retrieved
                                    is_retweet = FALSE) # excluding retweets
+
+save(capitol_dyor, file = "capitol_dyor.Rda")
 ```
 The resulting object is composed by columns of lists (e.g., "referenced tweets"
 and character data (e.g., "text").
+Now, it is important to save your data set as an easily readable file. In this case,
+I'll create a dataframe with the relevant columns and store it it as a Google Drive
+spreadsheet, just in case we want to use the data later:
+```{r}
+capitol_dyor_txt <- capitol_dyor %>% 
+  dplyr::select(text)
 
+googlesheets4::gs4_create("capitol_dyor") # create new spreadsheet
+
+googlesheets4::sheet_write(capitol_dyor_txt, ss = "https://docs.google.com/spreadsheets/d/1Ff6ORFeykkALJmZ4gtcOyuOXI1JqnrwgBJ4gc62gWO0/edit#gid=0",
+                           sheet = "capitol_dyor")
+
+```
 ### 2. Prepare data
 For this analysis, we will predominantly use the "text" column, that is, the 
 content of the actual tweet. We could use other data, for example number of likes,
@@ -89,19 +103,30 @@ clean_text <- function(text) {
   text <- gsub("[[:punct:]]+", "", text)
   return(text)
 }
-# Then, apply it to the text column:
+# Then, apply it to the text content:
 capitol_dyor$text <- clean_text(capitol_dyor$text)
 
 
-capitol_dyor$text <- capitol_dyor$text %>% 
-  anti_join(tidytext::get_stopwords())
-
 ```
 We also want to remove stop words, that is, those that do not add meaning to
-textual analysis. Before doing that
+textual analysis. Before doing that, we will tokenize the words:
 
 #### Tokenize words
 
+```{r}
+dyor_tokens <- capitol_dyor %>%
+  tidytext::unnest_tokens(word, text) %>% 
+  count(id, word)
+
+dyor_tokens
+
+```
+```{r}
+
+dyor_tokens$text <- dyor_tokens$word %>% 
+  dplyr::anti_join(tidytext::get_stopwords())
+
+```
 #### Create DTM
 
 ### 3. Analyze data
