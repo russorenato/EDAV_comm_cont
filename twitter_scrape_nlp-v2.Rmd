@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ## The 3 big tasks behind analyzing textual Twitter data
@@ -51,41 +51,24 @@ query!
 #### Search what you want
 Now, you're finally able to run the search. For that, you will use the
 `get_all_tweets()` function. In my case, I am interested in investigating how
-sectors of the alt-right have "highjacked" the expression "do your own research"
-to promote disinformation in many ways. Therefore, I will search for tweets
-containing that expression in a few days before and after the January 2021
-Capitol Attack, to assess whether people were using that expression to refer to
+sectors of the alt-right have "hijacked" narratives related to the Capitol attack
+in January 2021, to assess what type of vocabulary people were using to refer to
 different narratives related to that event.
+I decided to test how this approach would work with a relatively large corpus of 
+tweets, enabled by the affordances of the new Academic Research account.
 ```{r data collection}
 # capitol <- get_all_tweets(query = "capitol", # search query
-#                                    start_tweets = "2021-01-01T00:00:00Z", # search start date
-#                                    end_tweets = "2021-01-11T00:00:00Z", # search end date
+#                                    start_tweets = "2021-01-06T00:00:00Z", # search start date
+#                                    end_tweets = "2021-01-06T19:00:00Z", # search end date
 #                                    bearer_token = get_bearer(), # pulling stored bearer toke
 #                                    data_path = "data", #where data is stored as series of JSON files
-#                                    n = 10000, # total number of tweets retrieved
+#                                    n = 50000, # total number of tweets retrieved
 #                                    is_retweet = FALSE) # excluding retweets
+# 
+# save(capitol, file = "capitol.Rda")
+load("capitol.Rda")
 
-save(capitol, file = "capitol.Rda")
-load("/Users/renatorusso/Desktop/Ed.D./GR5702/EDAV_comm_cont/capitol.Rda")
 ```
-<!-- The resulting object is composed by columns of lists (e.g., "referenced tweets" -->
-<!-- and character data (e.g., "text"). -->
-<!-- Now, it is important to save your data set as an easily readable file. In this case, -->
-<!-- I'll create a dataframe with the relevant columns and store it it as a Google Drive -->
-<!-- spreadsheet, just in case we want to use the data later: -->
-<!-- ```{r} -->
-<!-- # capitol_dyor_txt <- capitol_dyor %>%  -->
-<!-- #   dplyr::select(text) -->
-<!-- #  -->
-<!-- googlesheets4::gs4_create("capitol_dyor") # create new spreadsheet -->
-
-<!-- googlesheets4::sheet_write(capitol_dyor_txt, ss = "https://docs.google.com/spreadsheets/d/1Ff6ORFeykkALJmZ4gtcOyuOXI1JqnrwgBJ4gc62gWO0/edit#gid=0", -->
-<!--                            sheet = "capitol_dyor") -->
-
-<!-- googlesheets4::sheet_write(capitol_dyor, ss = "https://docs.google.com/spreadsheets/d/1Ff6ORFeykkALJmZ4gtcOyuOXI1JqnrwgBJ4gc62gWO0/edit#gid=0", -->
-<!--                            sheet = "capitol_dyor") -->
-
-<!-- ``` -->
 ### 2. Prepare data
 For this analysis, we will predominantly use the "text" column, that is, the 
 content of the actual tweet. We could use other data, for example number of likes,
@@ -109,12 +92,10 @@ clean_text <- function(text) {
 }
 # Then, apply it to the text content:
 capitol$text <- clean_text(capitol$text)
-# capitol_dyor$text <- clean_text(capitol_dyor$text)
 
 ```
 We also want to remove stop words, that is, those that do not add meaning to
 textual analysis. Before doing that, we will tokenize the words:
-
 
 #### Tokenize words
 ```{r token}
@@ -124,54 +105,44 @@ capitol_tokens <- capitol %>%
 
 capitol_tokens <- capitol_tokens %>% 
   dplyr::anti_join(tidytext::get_stopwords())
-capitol_tokens
+
 ```
+Previous plotting showed that the word "capitol" was causing noise in the charts
+because it obviously appears in every tweet, so I decided to remove it from the
+corpus. I understand that this does not harm the analysis, because we are not
+interested in the connections with the word, but in the general meaning of tweets
+containing that word.
+```{r}
+my_stopwords <- tibble(word = c(as.character(1:10),
+                                    "capitol", "just", "now",
+                                "right now"))
+capitol_tokens <- capitol_tokens %>% 
+  anti_join(my_stopwords)
 
-
-
-#### Wordcloud
-##### Create DTM
-Before you create a wordcloud, you need a document-term matrix:
-```{r dtm}
-
-tweets_words <-  capitol %>%
-  select(text) %>%
-  unnest_tokens(word, text)
-
-words <- capitol_tokens %>%
-  count(word, sort=TRUE)
-
-words
-
-set.seed(1234) # for reproducibility
-wordcloud(words$word, words$n, min.freq = 5,
-          max.words=150, random.order=FALSE, rot.per=0.35,
-          colors=brewer.pal(8, "Dark2"))
-
-# 
-# dtm <- TermDocumentMatrix(docs) 
-# matrix <- as.matrix(dtm) 
-# words <- sort(rowSums(matrix),decreasing=TRUE) 
-# df <- data.frame(word = names(words),freq=words)
-# 
-# 
-# DTM <- dyor_tokens %>% 
-#   tidytext::cast_dtm(id, word, n)
-# 
-# DTM
-library(tm)
-# install.packages("wordcloud")
-library(wordcloud)
-set.seed(1234) # for reproducibility
-
-# wordcloud(words = dyor_tokens$word, freq = dyor_tokens$n, min.freq = 50,
-#           max.words=200, random.order=FALSE, rot.per=0.35,
-#           colors=brewer.pal(8, "Dark2"))
 ```
+I will also "stem" words, that is, combine words that share the same "root." This
+is important because preliminary analysis showed the existence of words that have
+similar seemantic value like "storm" and "storming"
+```{r stemming}
+library(corpus)
+capitol_tokens$word <- text_tokens(capitol_tokens$word, stemmer = "en") # english stemmer
 
+```
+#### Document-term matrix
+The document-term matrix (dtm) is "a mathematical matrix that describes the frequency
+of terms that occur in a collection of documents" [3]. In this case, each tweet
+is stored as a document, and each word in the tweets are a term. In other words,
+the matrix shows whether or not a word appears in a tweet.
+```{r DTM}
+DTM <- capitol_tokens %>%
+  tidytext::cast_dtm(id, word, n)
+DTM
+```
+This specific dtm has 17,635 documents (tweets) and 36,273 terms (unique words).
+
+The dtm will be used for exploratory analysis in the next section.
 
 ### 3. Analyze data
-#### Packages needed
 #### Exploratory analysis
 ##### Looking at the structure of the document-term matrix:
 ```{r }
@@ -179,30 +150,46 @@ capitol_tokens %>%
   group_by(word) %>% 
   summarize(occurrence = sum(n)) %>% 
   arrange(desc(occurrence))
+
 ```
 
 #### Natural language processing
-
+```{r topic modeling}
+library(tm)
+```
 ##### Visualize topiccs
 ```{r}
 library(topicmodels)
 ```
-## running Latent Drichlet Allocation (LDA)
+## Latent Drichlet Allocation (LDA)
+Latent Dirichlet Allocation is an approach to statistical topic modeling in which
+documents are represented as a set of topics and a topic is a set of words. The
+topics are situated in a "latent layer." Put in a very simple way, this type of
+modeling compares the presence of a term in a document and in a topic, and uses
+that comparison to establish the probability that the document is part of the topic.
+This type of modeling is used here to identify the topics and the co-occurring
+terms, that is, terms that appear together in the tweets.
+The code below performs the topic allocation. Initial runs of this and the following
+parts revealed that the topics were too similar, so I proceeded with the creation
+of only 2, which seemed to capture the meaning in tweets satisfactorily.
 ```{r}
-LDA <- topicmodels::LDA(DTM, k = 4, control = list(seed = 123))
-LDA_td <- tidytext::tidy(LDA)
+LDA <- topicmodels::LDA(DTM,
+                        k = 2, # number of topics
+                        control = list(seed = 123))
+View(LDA)
+LDA_td <- tidytext::tidy(LDA) #tidying the LDA object
 LDA_td
 ```
 ##### Visualize co-occurring terms
+The code below crates a tibble containing topics of 6 terms each.
 ```{r}
 library(tidytext)
-
 topTerms <- LDA_td %>% 
   group_by(topic) %>% 
-  top_n(7, beta) %>% 
-  arrange(topic, -beta)
+  top_n(5, beta) %>% # 5 main topics that will later be plotted
+  arrange(topic, -beta) # arranging topics in descending order of beta coefficient
+topTerms
 
-library(ggplot2)
 topTerms %>% 
   mutate(term = reorder_within(term, beta, topic)) %>% 
   ggplot(aes(term, beta, fill = factor(topic))) +
@@ -210,13 +197,13 @@ topTerms %>%
   facet_wrap(~ topic, scales = "free_x") +
   coord_flip() +
   scale_x_reordered() +
-  labs(title = "Topics in general tweets early in the war")
+  labs(title = "Topics in tweets containing the term 'capitol' in January 6, 2021")
 ```
 ```{r}
 library(widyr)
-word_pairs_dyor <- dyor_tokens %>% 
+word_pairs_capitol <- capitol_tokens %>% 
   pairwise_count(word, id, sort = TRUE, upper = FALSE)
-
+word_pairs_capitol
 ```
 ## Including Plots
 ```{r}
@@ -224,23 +211,24 @@ word_pairs_dyor <- dyor_tokens %>%
 library(igraph)
 library(ggraph)
 
-word_pairs_dyor %>%
-  filter(n >= 200) %>%
+word_pairs_capitol %>%
+  filter(n >= 180) %>%
   graph_from_data_frame() %>%
   ggraph(layout = "fr") +
   geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
   geom_node_point(size = 5) +
   geom_node_text(aes(label = name), repel = TRUE, 
-                 point.padding = unit(0.2, "lines")) +
+                 point.padding = unit(0.5, "lines")) +
   theme_void() +
-  labs(title = "Co-occurring terms in general tweets early in the war")
+  labs(title = "Co-occurring terms in tweets containing the term 'capitol' in January 6, 2021")
 
 
 ```
 
 References:
 https://jtr13.github.io/cc21/twitter-sentiment-analysis-in-r.html#word-frequency-plot
-
+https://towardsdatascience.com/create-a-word-cloud-with-r-bde3e7422e8a
+[3] DTM: https://bookdown.org/Maxine/tidy-text-mining/tidying-a-document-term-matrix.html
 
 <!-- #### Frequency of tweets -->
 <!-- Did the number of tweets increase during the hours leading to the Capitol attack? -->
@@ -279,3 +267,39 @@ https://jtr13.github.io/cc21/twitter-sentiment-analysis-in-r.html#word-frequency
 <!-- # plt -->
 
 <!-- ``` -->
+
+
+
+
+
+
+<!-- #### Wordcloud -->
+<!-- ##### Create DTM -->
+<!-- Before you create a wordcloud, you need a document-term matrix: -->
+<!-- ```{r dtm} -->
+<!-- library(wordcloud) -->
+<!-- tweets_words <-  capitol %>% -->
+<!--   select(text) %>% -->
+<!--   unnest_tokens(word, text) -->
+
+<!-- words <- capitol_tokens %>% -->
+<!--   count(word, sort=TRUE) -->
+
+<!-- words -->
+
+<!-- set.seed(1234) # for reproducibility -->
+<!-- wordcloud(words$word, words$n, min.freq = 50, -->
+<!--           max.words=150, random.order=FALSE, rot.per=0.35, -->
+<!--           colors=brewer.pal(8, "Dark2")) -->
+
+<!-- #  -->
+<!-- library(tm) -->
+<!-- # install.packages("wordcloud") -->
+<!-- library(wordcloud) -->
+<!-- set.seed(1234) # for reproducibility -->
+
+<!-- # wordcloud(words = dyor_tokens$word, freq = dyor_tokens$n, min.freq = 50, -->
+<!-- #           max.words=200, random.order=FALSE, rot.per=0.35, -->
+<!-- #           colors=brewer.pal(8, "Dark2")) -->
+<!-- ``` -->
+
