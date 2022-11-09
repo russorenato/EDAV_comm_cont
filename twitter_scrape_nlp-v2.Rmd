@@ -25,14 +25,14 @@ There are a few packages that help us retrieve data from Twitter. For this proje
 I am using [academictwitteR](https://www.research.ed.ac.uk/en/publications/academictwitter-an-r-package-to-access-the-twitter-academic-resea),
 but you may also want to check out [twitteR](https://cran.r-project.org/web/packages/twitteR/twitteR.pdf)
 and [rtweet](https://cran.rstudio.com/web/packages/rtweet/index.html). I have already
-experienced a few glitches with the former, which seems to be updated less
+experienced a few glitches with the former,  seems to be updated less
 frequently than rtweet, and the reason why I am using academictwitteR now is because
-it has a more straight forward connection with Twitter API V2, which we can use
+it has a more straight forward connection with Twitter API V2,  we can use
 to retrieve "historical data" (the previous API allowed retrieval of data from
 the past 8-10 days only, among other limitations).
 So, let's get on with the search:
-```{r}
-install.packages("academictwitteR")
+```{r academictwitter install}
+# install.packages("academictwitteR")
 library(academictwitteR)
 ```
 #### Set up credentials
@@ -42,7 +42,7 @@ With academictwitteR, I can use the Bearer Token only. The [API documentation](h
 and the [package repository](https://github.com/cjbarrie/academictwitteR) have
 more information on that. For now, you have to call the function `set_bearer()` to
 store that information for future use.
-```{r}
+```{r bearer}
 set_bearer()
 ```
 Once you follow the instructions above, you are ready to go ahead and run your
@@ -56,46 +56,50 @@ to promote disinformation in many ways. Therefore, I will search for tweets
 containing that expression in a few days before and after the January 2021
 Capitol Attack, to assess whether people were using that expression to refer to
 different narratives related to that event.
-```{r}
-capitol_dyor <- get_all_tweets(query = "dyor", # search query
-                                   start_tweets = "2021-01-01T00:00:00Z", # search start date
-                                   end_tweets = "2021-01-11T00:00:00Z", # search end date
-                                   bearer_token = get_bearer(), # pulling stored bearer toke
-                                   data_path = "data", #where data is stored as series of JSON files
-                                   n = 10000, # total number of tweets retrieved
-                                   is_retweet = FALSE) # excluding retweets
+```{r data collection}
+# capitol <- get_all_tweets(query = "capitol", # search query
+#                                    start_tweets = "2021-01-01T00:00:00Z", # search start date
+#                                    end_tweets = "2021-01-11T00:00:00Z", # search end date
+#                                    bearer_token = get_bearer(), # pulling stored bearer toke
+#                                    data_path = "data", #where data is stored as series of JSON files
+#                                    n = 10000, # total number of tweets retrieved
+#                                    is_retweet = FALSE) # excluding retweets
 
-save(capitol_dyor, file = "capitol_dyor.Rda")
+save(capitol, file = "capitol.Rda")
+load("/Users/renatorusso/Desktop/Ed.D./GR5702/EDAV_comm_cont/capitol.Rda")
 ```
-The resulting object is composed by columns of lists (e.g., "referenced tweets"
-and character data (e.g., "text").
-Now, it is important to save your data set as an easily readable file. In this case,
-I'll create a dataframe with the relevant columns and store it it as a Google Drive
-spreadsheet, just in case we want to use the data later:
-```{r}
-capitol_dyor_txt <- capitol_dyor %>% 
-  dplyr::select(text)
+<!-- The resulting object is composed by columns of lists (e.g., "referenced tweets" -->
+<!-- and character data (e.g., "text"). -->
+<!-- Now, it is important to save your data set as an easily readable file. In this case, -->
+<!-- I'll create a dataframe with the relevant columns and store it it as a Google Drive -->
+<!-- spreadsheet, just in case we want to use the data later: -->
+<!-- ```{r} -->
+<!-- # capitol_dyor_txt <- capitol_dyor %>%  -->
+<!-- #   dplyr::select(text) -->
+<!-- #  -->
+<!-- googlesheets4::gs4_create("capitol_dyor") # create new spreadsheet -->
 
-googlesheets4::gs4_create("capitol_dyor") # create new spreadsheet
+<!-- googlesheets4::sheet_write(capitol_dyor_txt, ss = "https://docs.google.com/spreadsheets/d/1Ff6ORFeykkALJmZ4gtcOyuOXI1JqnrwgBJ4gc62gWO0/edit#gid=0", -->
+<!--                            sheet = "capitol_dyor") -->
 
-googlesheets4::sheet_write(capitol_dyor_txt, ss = "https://docs.google.com/spreadsheets/d/1Ff6ORFeykkALJmZ4gtcOyuOXI1JqnrwgBJ4gc62gWO0/edit#gid=0",
-                           sheet = "capitol_dyor")
+<!-- googlesheets4::sheet_write(capitol_dyor, ss = "https://docs.google.com/spreadsheets/d/1Ff6ORFeykkALJmZ4gtcOyuOXI1JqnrwgBJ4gc62gWO0/edit#gid=0", -->
+<!--                            sheet = "capitol_dyor") -->
 
-```
+<!-- ``` -->
 ### 2. Prepare data
 For this analysis, we will predominantly use the "text" column, that is, the 
 content of the actual tweet. We could use other data, for example number of likes,
 or the timeline of a user, but let's focus on the content for now.
 
 #### Packages needed
-```{r}
+```{r package install}
 library(tidytext)
 library(dplyr)
 ```
 #### Cleaning the data
 The function below is used to remove capitalization, and to remove numbers and 
 punctuation:
-```{r}
+```{r data cleaning}
 # First, we define the function
 clean_text <- function(text) {
   text <- tolower(text)
@@ -104,52 +108,174 @@ clean_text <- function(text) {
   return(text)
 }
 # Then, apply it to the text content:
-capitol_dyor$text <- clean_text(capitol_dyor$text)
-
+capitol$text <- clean_text(capitol$text)
+# capitol_dyor$text <- clean_text(capitol_dyor$text)
 
 ```
 We also want to remove stop words, that is, those that do not add meaning to
 textual analysis. Before doing that, we will tokenize the words:
 
-#### Tokenize words
 
-```{r}
-dyor_tokens <- capitol_dyor %>%
+#### Tokenize words
+```{r token}
+capitol_tokens <- capitol %>%
   tidytext::unnest_tokens(word, text) %>% 
   count(id, word)
 
-dyor_tokens
-
-```
-```{r}
-
-dyor_tokens$text <- dyor_tokens$word %>% 
+capitol_tokens <- capitol_tokens %>% 
   dplyr::anti_join(tidytext::get_stopwords())
-
+capitol_tokens
 ```
-#### Create DTM
+
+
+
+#### Wordcloud
+##### Create DTM
+Before you create a wordcloud, you need a document-term matrix:
+```{r dtm}
+
+tweets_words <-  capitol %>%
+  select(text) %>%
+  unnest_tokens(word, text)
+
+words <- capitol_tokens %>%
+  count(word, sort=TRUE)
+
+words
+
+set.seed(1234) # for reproducibility
+wordcloud(words$word, words$n, min.freq = 5,
+          max.words=150, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+
+# 
+# dtm <- TermDocumentMatrix(docs) 
+# matrix <- as.matrix(dtm) 
+# words <- sort(rowSums(matrix),decreasing=TRUE) 
+# df <- data.frame(word = names(words),freq=words)
+# 
+# 
+# DTM <- dyor_tokens %>% 
+#   tidytext::cast_dtm(id, word, n)
+# 
+# DTM
+library(tm)
+# install.packages("wordcloud")
+library(wordcloud)
+set.seed(1234) # for reproducibility
+
+# wordcloud(words = dyor_tokens$word, freq = dyor_tokens$n, min.freq = 50,
+#           max.words=200, random.order=FALSE, rot.per=0.35,
+#           colors=brewer.pal(8, "Dark2"))
+```
+
 
 ### 3. Analyze data
 #### Packages needed
 #### Exploratory analysis
+##### Looking at the structure of the document-term matrix:
+```{r }
+capitol_tokens %>% 
+  group_by(word) %>% 
+  summarize(occurrence = sum(n)) %>% 
+  arrange(desc(occurrence))
+```
 
 #### Natural language processing
 
 ##### Visualize topiccs
-
+```{r}
+library(topicmodels)
+```
+## running Latent Drichlet Allocation (LDA)
+```{r}
+LDA <- topicmodels::LDA(DTM, k = 4, control = list(seed = 123))
+LDA_td <- tidytext::tidy(LDA)
+LDA_td
+```
 ##### Visualize co-occurring terms
+```{r}
+library(tidytext)
 
+topTerms <- LDA_td %>% 
+  group_by(topic) %>% 
+  top_n(7, beta) %>% 
+  arrange(topic, -beta)
 
-```{r cars}
-summary(cars)
+library(ggplot2)
+topTerms %>% 
+  mutate(term = reorder_within(term, beta, topic)) %>% 
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free_x") +
+  coord_flip() +
+  scale_x_reordered() +
+  labs(title = "Topics in general tweets early in the war")
 ```
+```{r}
+library(widyr)
+word_pairs_dyor <- dyor_tokens %>% 
+  pairwise_count(word, id, sort = TRUE, upper = FALSE)
 
+```
 ## Including Plots
+```{r}
+#network of co-occurring words
+library(igraph)
+library(ggraph)
 
-You can also embed plots, for example:
+word_pairs_dyor %>%
+  filter(n >= 200) %>%
+  graph_from_data_frame() %>%
+  ggraph(layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
+  geom_node_point(size = 5) +
+  geom_node_text(aes(label = name), repel = TRUE, 
+                 point.padding = unit(0.2, "lines")) +
+  theme_void() +
+  labs(title = "Co-occurring terms in general tweets early in the war")
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+References:
+https://jtr13.github.io/cc21/twitter-sentiment-analysis-in-r.html#word-frequency-plot
+
+
+<!-- #### Frequency of tweets -->
+<!-- Did the number of tweets increase during the hours leading to the Capitol attack? -->
+<!-- # ```{r frequency of tweets} -->
+<!-- # # this part of the code has been adapted to accommodate changes in the last version -->
+<!-- # # of Twitter API. It appears originally in Chapter 33 of last year's Community -->
+<!-- # # Contribution (https://jtr13.github.io/cc21/twitter-sentiment-analysis-in-r.html) -->
+<!-- # library(lubridate) -->
+<!-- # library(stringr) -->
+<!-- # capitol_dyor %>%  -->
+<!-- #   mutate( -->
+<!-- #     created_at = created_at %>%  -->
+<!-- #       # Remove zeros. -->
+<!-- #       str_remove_all(pattern = '\\+0000') %>% -->
+<!-- #       # Parse date. -->
+<!-- #       parse_date_time(orders = '%y-%m-%d %H%M%S') -->
+<!-- #   ) -->
+<!-- #  -->
+<!-- # # capitol_dyor %>%  -->
+<!-- # #   mutate(Created_At_Round = created_at %>% -->
+<!-- # #            round(units = 'hours') %>% -->
+<!-- # #            as.POSIXct()) -->
+<!-- #  -->
+<!-- # # tweets.df %>% pull(created) %>% min() -->
+<!-- # library(ggplot2) -->
+<!-- # plt <- capitol_dyor %>%  -->
+<!-- #   dplyr::count(created_at) %>%  -->
+<!-- #   ggplot(mapping = aes(x = created_at, y = n)) + -->
+<!-- #   theme_light() + -->
+<!-- #   geom_line() + -->
+<!-- #   xlab(label = 'Date') + -->
+<!-- #   ylab(label = NULL) + -->
+<!-- #   ggtitle(label = 'Number of Tweets per Hour') -->
+<!-- # library(plotly) -->
+<!-- #  -->
+<!-- # plt -->
+
+<!-- ``` -->
