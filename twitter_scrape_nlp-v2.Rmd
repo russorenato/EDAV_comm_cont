@@ -9,6 +9,11 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+## Loading all the required packages
+```{r}
+library(widyr)
+```
+
 ## The 3 big tasks behind analyzing textual Twitter data
 ### 1. Scrape data
 The first thing you should do is obtaining data. Fortunately, Twitter makes it 
@@ -62,11 +67,11 @@ tweets, enabled by the affordances of the new Academic Research account.
 #                                    end_tweets = "2021-01-06T19:00:00Z", # search end date
 #                                    bearer_token = get_bearer(), # pulling stored bearer toke
 #                                    data_path = "data", #where data is stored as series of JSON files
-#                                    n = 50000, # total number of tweets retrieved
+#                                    n = 1000, # total number of tweets retrieved
 #                                    is_retweet = FALSE) # excluding retweets
 # 
-# save(capitol, file = "capitol.Rda")
-load("capitol.Rda")
+# save(capitol, file = "capitol_twts.Rda")
+load("capitol_twts.Rda")
 
 ```
 ### 2. Prepare data
@@ -115,7 +120,7 @@ containing that word.
 ```{r}
 my_stopwords <- tibble(word = c(as.character(1:10),
                                     "capitol", "just", "now",
-                                "right now"))
+                                "right now", "get", "like"))
 capitol_tokens <- capitol_tokens %>% 
   anti_join(my_stopwords)
 
@@ -126,7 +131,6 @@ similar seemantic value like "storm" and "storming"
 ```{r stemming}
 library(corpus)
 capitol_tokens$word <- text_tokens(capitol_tokens$word, stemmer = "en") # english stemmer
-
 ```
 #### Document-term matrix
 The document-term matrix (dtm) is "a mathematical matrix that describes the frequency
@@ -176,20 +180,22 @@ of only 2, which seemed to capture the meaning in tweets satisfactorily.
 LDA <- topicmodels::LDA(DTM,
                         k = 2, # number of topics
                         control = list(seed = 123))
-View(LDA)
+
 LDA_td <- tidytext::tidy(LDA) #tidying the LDA object
-LDA_td
+
 ```
 ##### Visualize co-occurring terms
-The code below crates a tibble containing topics of 6 terms each.
+The code below creates a tibble containing topics of 5 terms each.
 ```{r}
+library(ggplot2)
 library(tidytext)
 topTerms <- LDA_td %>% 
   group_by(topic) %>% 
-  top_n(5, beta) %>% # 5 main topics that will later be plotted
+  top_n(5, beta) %>% # 5 main terms that will later be plotted
   arrange(topic, -beta) # arranging topics in descending order of beta coefficient
-topTerms
-
+```
+Then, we plot the topics.
+```{r}
 topTerms %>% 
   mutate(term = reorder_within(term, beta, topic)) %>% 
   ggplot(aes(term, beta, fill = factor(topic))) +
@@ -199,20 +205,27 @@ topTerms %>%
   scale_x_reordered() +
   labs(title = "Topics in tweets containing the term 'capitol' in January 6, 2021")
 ```
+The process of identifying the number of topics and terms in each topic was iterative
+in this case. Preliminary plotting showed that there was strong intersection between 
+topics, so I kept reducing the number until I found two that seemed relevant.
+Apparently, topic #2 refers to the process of protesters (stem "protest") storming
+the capitol building (stem "build"); conversely, topic #1 seems to refer to police
+reaction to the attacks by the supporters.
+
+Another way to visualize the relationships in the corpus is by identifying the 
+frequency of word pairs present in the corpus. The code below generates a data 
 ```{r}
-library(widyr)
 word_pairs_capitol <- capitol_tokens %>% 
   pairwise_count(word, id, sort = TRUE, upper = FALSE)
-word_pairs_capitol
 ```
+
 ## Including Plots
 ```{r}
 #network of co-occurring words
 library(igraph)
 library(ggraph)
-
 word_pairs_capitol %>%
-  filter(n >= 180) %>%
+  filter(n >= 16) %>%
   graph_from_data_frame() %>%
   ggraph(layout = "fr") +
   geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
