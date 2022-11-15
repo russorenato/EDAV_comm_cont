@@ -9,19 +9,22 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Loading all the required packages
+### Loading all the required packages
 ```{r}
 library(widyr)
 library(tidytext)
 library(dplyr)
 library(corpus)
-library(tidyr)
-library(forcats)
+library(tidyr) # used for sentiment analysis plot
+library(forcats) 
 library(tm)
 library(topicmodels) # visualization of topics in the NLP section
 library(ggplot2) # chart of co-occurring terms
 library(tidytext) # chart of co-occurring terms
-library(rtweet)
+library(wordcloud) #for wordcloud
+library(igraph) # for the network plot of co-occurring words
+library(ggraph) # for the network plot of co-occurring words
+library(syuzhet) #for sentimennt analysis
 
 ```
 
@@ -76,14 +79,15 @@ in January 2021, to assess what type of vocabulary people were using to refer to
 different narratives related to that event.
 For the purpose of this example, I will limit the number of tweets retrieved to 5000.
 ```{r data collection}
-capitol <- get_all_tweets(query = "capitol", # search query
-                                   start_tweets = "2021-01-06T00:00:00Z", # search start date
-                                   end_tweets = "2021-01-06T19:00:00Z", # search end date
-                                   bearer_token = get_bearer(), # pulling stored bearer toke
-                                   data_path = "data", #where data is stored as series of JSON files
-                                   n = 5000, # total number of tweets retrieved
-                                   is_retweet = FALSE) # excluding retweets
-
+# capitol <- get_all_tweets(query = "capitol", # search query
+#                                    start_tweets = "2021-01-06T00:00:00Z", # search start date
+#                                    end_tweets = "2021-01-06T19:00:00Z", # search end date
+#                                    bearer_token = get_bearer(), # pulling stored bearer toke
+#                                    data_path = "data", #where data is stored as series of JSON files
+#                                    n = 5000, # total number of tweets retrieved
+#                                    is_retweet = FALSE) # excluding retweets
+# save(capitol, file = "capitol.Rda")
+load("capitol.Rda")
 ```
 ### 2. Prepare data
 For this analysis, we will predominantly use the "text" column, that is, the 
@@ -115,7 +119,7 @@ capitol_tokens <- capitol %>%
   count(id, word)
 ```
 Below, I am using ```tidytext```'s standard set of stop words:
-``` {r}
+``` {r token_2}
 capitol_tokens <- capitol_tokens %>% 
   dplyr::anti_join(tidytext::get_stopwords())
 
@@ -125,7 +129,7 @@ in the charts because it obviously appears in every tweet, so I decided to remov
 it from the corpus. I understand that this does not harm the analysis, because we
 are not interested in the connections with the word, but in the general meaning of
 tweets containing that word.
-```{r}
+```{r stopwords}
 my_stopwords <- tibble(word = c(as.character(1:10),
                                     "capitol", "just", "now",
                                 "right now", "get", "like"))
@@ -155,18 +159,24 @@ be used for exploratory analysis in the next section.
 
 ### 3. Analyze data
 #### Exploratory analysis
-```{r }
+First, let's look at the frequency of words. For that, we apply ```group_by()```
+and ```summarize()``` to the tokens dataset to find out the frequency:
+```{r word_frequency}
 capitol_tokens %>% 
   group_by(word) %>% 
   summarize(occurrence = sum(n)) %>% 
   arrange(desc(occurrence))
+
+
 ```
-Now, we will look at the frequency of words (tokens). We can see that the 
+As seen above, the resulting tibble shows only the description of the words as 
+list objects ```<chr [1]>```, but not the words themselves, so I create a new tibble
+that "reveals the words:"
 ```{r}
 tokens_words <- capitol_tokens %>% # creating a data frame with the frequencies
   group_by(word) %>% 
   summarise(N = n())
-
+class(tokens_words)
 tokens_words$word <- as.character(tokens_words$word) # turning the tokens into character objects
 ```
 Below, we can see the list of words by frequency. We notice that there is a
@@ -191,11 +201,27 @@ tokens_words %>%
   theme_classic()
 ```
 
+Another way to visualize the frequency of words is with a wordcloud. Although not
+always a good choice, in this case a wordcloud allows for visualizations of other
+terms that don't fit in the bar chart.
+```{r}
+set.seed(1234) # for reproducibility
+
+pal <- brewer.pal(9, "BuGn") # setting the color palette
+pal <- pal[-(1:5)] # this improves readability by narrowing the range of shades of the palette showing in the chart
+
+wordcloud(words = tokens_words$word,
+          freq = tokens_words$N,
+          min.freq = 50,
+          max.words=200,
+          random.order=FALSE,
+          rot.per=0.35,
+          colors=pal)
+```
+
 
 #### Natural language processing
-##### Visualize topics
-
-## Latent Dirichlet Allocation (LDA)
+##### Visualize topics with Latent Dirichlet Allocation (LDA)
 Latent Dirichlet Allocation is an approach to statistical topic modeling in which
 documents are represented as a set of topics and a topic is a set of words. The
 topics are situated in a "latent layer." Put in a very simple way, this type of
@@ -234,121 +260,104 @@ topTerms %>%
   scale_x_reordered() +
   labs(title = "Topics in tweets containing the term 'capitol' in January 6, 2021")
 ```
+
+The process of identifying the number of topics and terms in each topic was iterative
+in this case. Preliminary plotting showed that there was strong intersection between
+topics, so I kept reducing the number until I found two that seemed relevant.
+Apparently, topic #2 refers to the process of protesters (stem "protest") storming
+the capitol building (stem "build"); conversely, topic #1 seems to refer to police
+reaction to the attacks by the supporters.
+
+Another way to visualize the relationships in the corpus is by identifying the
+frequency of word pairs present in the corpus. The code below generates a data
 ```{r}
-## Including Plots
-#network of co-occurring words
-library(igraph)
-library(ggraph)
+word_pairs_capitol <- capitol_tokens %>%
+  pairwise_count(word, id, sort = TRUE, upper = FALSE)
+```
+##### Network plot of co-occurring words
+```{r}
 word_pairs_capitol %>%
-  filter(n >= 16) %>%
+  filter(n >= 80) %>%
   graph_from_data_frame() %>%
   ggraph(layout = "fr") +
   geom_edge_link(aes(edge_alpha = n, edge_width = n), edge_colour = "cyan4") +
   geom_node_point(size = 5) +
-  geom_node_text(aes(label = name), repel = TRUE, 
+  geom_node_text(aes(label = name), repel = TRUE,
                  point.padding = unit(0.5, "lines")) +
   theme_void() +
   labs(title = "Co-occurring terms in tweets containing the term 'capitol' in January 6, 2021")
 
 ```
 
+The plot above shows a few potentially interesting aspects of this corpus, among
+which we highlight two. First, there is a cluster of words related to non-lethal
+police weapons ("tear gas" and "rubber bullet"); that cluster is connected to 
+"police" and and "people." Another aspect is the proximity of "trump" to the
+center of the graph, strongly connected with "support" (possibly stemmed from
+"supporter/s"). "Support" is also strongly connected with "build" and "storm."
+This is compatible with the pairwise chart, in which one of the topics is
+possibly associated with the police reaction to the attacks.
+
+```{r}
+tweets <- iconv(capitol$text)
+
+sentiment <- get_nrc_sentiment(tweets)
+head(sentiment)
+head(tweets)
+
+sentiment_sums <- sentiment %>%
+  summarise_all(sum)
+
+sentiment_sums = gather(sentiment, key = "S_sum") %>%
+    group_by(S_sum) %>%
+    summarize(number = sum(value, na.rm = TRUE))
+sentiment_sums
+
+sentiment_sums'
+
+ggplot(data = sentiment_sums, aes(x = fct_reorder(S_sum, number, .desc = TRUE), y = number, fill = number)) +
+  geom_bar(stat = "identity") +
+  ylab("Count") +
+  xlab("Sentiment") +
+  theme_classic()
+
+```
+
+### 4. Conclusion
+With this project, we covered three main steps in textual analysis of twitter data.
+First, we used Twitter API V2 to scrape tweets of a topic of interest within a
+time range. Second, we prepared the data by removing punctuation, stemming, and 
+stop words -- both standard ones and those which preliminary analysis had shown 
+to cause overplotting in later stages. Finally, I conduct some tasks in textual 
+analysis. At that last stage, I first conducted an exploratory analysis by
+identifying most frequent terms in the corpus. I also used a wordcloud to offer
+an alternative visualization to word frequency. Then, I undertook two natural 
+language processing tasks: Through Latent Dirichlet Allocation, I showed two of
+the most salient topics in the data; and, finally, I plotted bi-grams, which
+demonstrate strength of relationship between words, and "clusters" where words
+concentrate.
+
+The most challennging part of carrying out this project was the handling data
+objects, and this is mainly because the object returned by the search is a dataframe
+with other dataframes nested. Because of that, saving a csv file was not as 
+straightforward as I was used to. Therefore, it was a little confusing to define
+a strategy to deal with files: should I use a Rda file or save only the columns
+I needed as csv files? With saved files, I was not sure how they would behave 
+when someone opened the .rmd file in another computer. I ended up sticking with the
+.rda file, because it seemed the most natural choice as a format in which files
+"carry" all the information needed for analysis.
+
+
+
 References:
-https://jtr13.github.io/cc21/twitter-sentiment-analysis-in-r.html#word-frequency-plot
-https://towardsdatascience.com/create-a-word-cloud-with-r-bde3e7422e8a
+
+[1] https://jtr13.github.io/cc21/twitter-sentiment-analysis-in-r.html#word-frequency-plot
+
+[2] https://towardsdatascience.com/create-a-word-cloud-with-r-bde3e7422e8a
+
 [3] DTM: https://bookdown.org/Maxine/tidy-text-mining/tidying-a-document-term-matrix.html
+
 [4] LDA https://blog.marketmuse.com/glossary/latent-dirichlet-allocation-definition/
-
-<!-- ```{r} -->
-<!-- (capitol %>%  -->
-<!--   group_by(text) %>%  -->
-<!--   arrange(desc(capitol$public_metrics$retweet_count)) -->
-
-
-<!-- ) -->
-
-
-<!-- (capitol %>% -->
-<!--   filter(public_metrics$retweet_count > 5000) %>%  -->
-<!--   arrange(desc(public_metrics$retweet_count))) %>%  -->
-<!--   ggplot(aes(x = text, y = public_metrics$retweet_count)) + -->
-<!--   geom_bar(stat = "identity") + -->
-<!--   ylab("Count") + -->
-<!--   xlab("Term (stemmed)") + -->
-<!--   theme_classic() + -->
-<!--   coord_flip() -->
-
-
-
-
-<!--   tweet_ids_rt <- json_data %>%  -->
-<!--   filter(public_metrics.retweet_count > 0) %>% -->
-<!--   select(status_id = id) -->
-
-
-<!--   arrange(desc(capitol$public_metrics$reply_count)) %>%  -->
-<!--   ggplot(aes(x = text, y = capitol$public_metrics$reply_count)) + -->
-<!--   geom_bar(stat = "identity") + -->
-<!--   ylab("Count") + -->
-<!--   xlab("Term (stemmed)") + -->
-<!--   theme_classic() -->
-
-<!-- capitol %>% -->
-<!--   count(capitol$public_metrics$reply_count, text) %>%  -->
-<!--   arrange(desc(capitol$public_metrics$retweet_count)) -->
-
-
-<!-- capitol_rt_ccount %>%  -->
-<!--   group_by(text) -->
-
-
-<!-- capitol_rt_ccount -->
-
-
-<!-- capitol$public_metrics$reply_count -->
-<!-- ``` -->
-
-<!-- #### Frequency of tweets -->
-<!-- Did the number of tweets increase during the hours leading to the Capitol attack? -->
-<!-- # ```{r frequency of tweets} -->
-<!-- # # this part of the code has been adapted to accommodate changes in the last version -->
-<!-- # # of Twitter API. It appears originally in Chapter 33 of last year's Community -->
-<!-- # # Contribution (https://jtr13.github.io/cc21/twitter-sentiment-analysis-in-r.html) -->
-<!-- # library(lubridate) -->
-<!-- # library(stringr) -->
-<!-- # capitol_dyor %>%  -->
-<!-- #   mutate( -->
-<!-- #     created_at = created_at %>%  -->
-<!-- #       # Remove zeros. -->
-<!-- #       str_remove_all(pattern = '\\+0000') %>% -->
-<!-- #       # Parse date. -->
-<!-- #       parse_date_time(orders = '%y-%m-%d %H%M%S') -->
-<!-- #   ) -->
-<!-- #  -->
-<!-- # # capitol_dyor %>%  -->
-<!-- # #   mutate(Created_At_Round = created_at %>% -->
-<!-- # #            round(units = 'hours') %>% -->
-<!-- # #            as.POSIXct()) -->
-<!-- #  -->
-<!-- # # tweets.df %>% pull(created) %>% min() -->
-<!-- # library(ggplot2) -->
-<!-- # plt <- capitol_dyor %>%  -->
-<!-- #   dplyr::count(created_at) %>%  -->
-<!-- #   ggplot(mapping = aes(x = created_at, y = n)) + -->
-<!-- #   theme_light() + -->
-<!-- #   geom_line() + -->
-<!-- #   xlab(label = 'Date') + -->
-<!-- #   ylab(label = NULL) + -->
-<!-- #   ggtitle(label = 'Number of Tweets per Hour') -->
-<!-- # library(plotly) -->
-<!-- #  -->
-<!-- # plt -->
-
-<!-- ``` -->
-
-
-
-
-
 
 <!-- #### Wordcloud -->
 <!-- ##### Create DTM -->
