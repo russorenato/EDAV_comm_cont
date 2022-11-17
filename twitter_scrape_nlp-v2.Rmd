@@ -16,16 +16,18 @@ library(tidytext)
 library(dplyr)
 library(corpus)
 library(tidyr) # used for sentiment analysis plot
-library(forcats) 
+library(forcats)
 library(tm)
 library(topicmodels) # visualization of topics in the NLP section
 library(ggplot2) # chart of co-occurring terms
-library(tidytext) # chart of co-occurring terms
+library(tidytext) # chart of co-occurring terms and get sentiment in seniment analysis
 library(wordcloud) #for wordcloud
 library(igraph) # for the network plot of co-occurring words
 library(ggraph) # for the network plot of co-occurring words
-library(syuzhet) #for sentimennt analysis
-
+library(syuzhet) # for sentiment analysis
+library(textdata) # for sentiment analysis
+library(gridExtra) # for sentiment analysis grid charts
+library(tidyr) # for sentiment analysis
 ```
 
 In this community contribution, we will be looking at three broader tasks of
@@ -34,10 +36,10 @@ will look at Twitter datas, and see methods for **collecting (scraping)**,
 **preparing**, and **analyzing** Twitter data.
 
 ### 1. Scrape data
-The first thing you should do is obtaining data. Fortunately, Twitter makes it 
+The first thing you should do is obtaining data. Fortunately, Twitter makes it
 relatively easy to scrape data, all you need to start is a Twitter Developer
 Account so you can get access to Twitter API. Actually, there are a few different
-types of Developer Account. For the purpose of this project, I am using my 
+types of Developer Account. For the purpose of this project, I am using my
 Academic Research account. You may want to check out [Twitter's Developer Portal](https://developer.twitter.com/)
 for more information.
 From this point on, I will assume that you have your Twitter API credentials at
@@ -50,7 +52,7 @@ but you may also want to check out [twitteR](https://cran.r-project.org/web/pack
 and [rtweet](https://cran.rstudio.com/web/packages/rtweet/index.html). I have
 already experienced a few glitches with the former, which seems to be updated less
 frequently than rtweet. Another reason why I am using academictwitteR now is because
-it has a more straight forward connection with Twitter API V2, which we can use 
+it has a more straight forward connection with Twitter API V2, which we can use
 to retrieve "historical data" (the previous API allowed retrieval of data from
 the past 8-10 days only, among other limitations).
 So, let's get on with the search:
@@ -90,12 +92,12 @@ For the purpose of this example, I will limit the number of tweets retrieved to 
 load("capitol.Rda")
 ```
 ### 2. Prepare data
-For this analysis, we will predominantly use the "text" column, that is, the 
+For this analysis, we will predominantly use the "text" column, that is, the
 content of the actual tweet. We could use other data, for example number of likes,
 or the timeline of a user, but let's focus on the content for now.
 
 #### Removing capitalization, numbers, and punctuation.
-The custom function below is used to remove capitalization, and to remove numbers and 
+The custom function below is used to remove capitalization, and to remove numbers and
 punctuation:
 ```{r data cleaning function}
 # First, we define the function
@@ -115,16 +117,16 @@ process that will be useful in other steps further ahead:
 #### Tokenize words
 ```{r token}
 capitol_tokens <- capitol %>%
-  tidytext::unnest_tokens(word, text) %>% 
+  tidytext::unnest_tokens(word, text) %>%
   count(id, word)
 ```
 Below, I am using ```tidytext```'s standard set of stop words:
 ``` {r token_2}
-capitol_tokens <- capitol_tokens %>% 
+capitol_tokens <- capitol_tokens %>%
   dplyr::anti_join(tidytext::get_stopwords())
 
 ```
-However, preliminary plotting showed that the word "capitol" was causing noise 
+However, preliminary plotting showed that the word "capitol" was causing noise
 in the charts because it obviously appears in every tweet, so I decided to remove
 it from the corpus. I understand that this does not harm the analysis, because we
 are not interested in the connections with the word, but in the general meaning of
@@ -133,7 +135,7 @@ tweets containing that word.
 my_stopwords <- tibble(word = c(as.character(1:10),
                                     "capitol", "just", "now",
                                 "right now", "get", "like"))
-capitol_tokens <- capitol_tokens %>% 
+capitol_tokens <- capitol_tokens %>%
   anti_join(my_stopwords)
 ```
 I will also "stem" words, that is, combine words that share the same "root." This
@@ -162,19 +164,19 @@ be used for exploratory analysis in the next section.
 First, let's look at the frequency of words. For that, we apply ```group_by()```
 and ```summarize()``` to the tokens dataset to find out the frequency:
 ```{r word_frequency}
-capitol_tokens %>% 
-  group_by(word) %>% 
-  summarize(occurrence = sum(n)) %>% 
+capitol_tokens %>%
+  group_by(word) %>%
+  summarize(occurrence = sum(n)) %>%
   arrange(desc(occurrence))
 
 
 ```
-As seen above, the resulting tibble shows only the description of the words as 
+As seen above, the resulting tibble shows only the description of the words as
 list objects ```<chr [1]>```, but not the words themselves, so I create a new tibble
 that "reveals the words:"
 ```{r}
 tokens_words <- capitol_tokens %>% # creating a data frame with the frequencies
-  group_by(word) %>% 
+  group_by(word) %>%
   summarise(N = n())
 class(tokens_words)
 tokens_words$word <- as.character(tokens_words$word) # turning the tokens into character objects
@@ -184,16 +186,16 @@ Below, we can see the list of words by frequency. We notice that there is a
 "polic" are the 3 most frequent ones. "Storm," "build," and "polic" represent word
 stems, so words like "building" are within the "build" term, for example.
 ```{r}
-(tokens_words %>% 
-  group_by(word) %>% 
+(tokens_words %>%
+  group_by(word) %>%
   arrange(desc(N))
 )
 ```
 And we can plot the word frequency in a bar chart:
 ```{r word_frequency_chart}
-tokens_words %>% 
-  group_by(word) %>% 
-  filter(N > 300) %>% 
+tokens_words %>%
+  group_by(word) %>%
+  filter(N > 300) %>%
   ggplot(aes(x = fct_reorder(word, N, .desc = TRUE), y = N, fill = N)) +
   geom_bar(stat = "identity") +
   ylab("Count") +
@@ -244,15 +246,15 @@ LDA_td <- tidytext::tidy(LDA) #tidying the LDA object
 ##### Visualize co-occurring terms
 The code below creates a tibble containing topics of 5 terms each.
 ```{r}
-topTerms <- LDA_td %>% 
-  group_by(topic) %>% 
+topTerms <- LDA_td %>%
+  group_by(topic) %>%
   top_n(5, beta) %>% # 5 main terms that will later be plotted
   arrange(topic, -beta) # arranging topics in descending order of beta coefficient
 ```
 Then, we plot the topics.
 ```{r}
-topTerms %>% 
-  mutate(term = reorder_within(term, beta, topic)) %>% 
+topTerms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
   ggplot(aes(term, beta, fill = factor(topic))) +
   geom_col(show.legend = FALSE) +
   facet_wrap(~ topic, scales = "free_x") +
@@ -291,20 +293,29 @@ word_pairs_capitol %>%
 
 The plot above shows a few potentially interesting aspects of this corpus, among
 which we highlight two. First, there is a cluster of words related to non-lethal
-police weapons ("tear gas" and "rubber bullet"); that cluster is connected to 
+police weapons ("tear gas" and "rubber bullet"); that cluster is connected to
 "police" and and "people." Another aspect is the proximity of "trump" to the
 center of the graph, strongly connected with "support" (possibly stemmed from
 "supporter/s"). "Support" is also strongly connected with "build" and "storm."
 This is compatible with the pairwise chart, in which one of the topics is
 possibly associated with the police reaction to the attacks.
 
-```{r}
-tweets <- iconv(capitol$text)
+##### Sentiment analysis
+```{r Sentiment analysis}
+tweets <- iconv(capitol$text) # creating a tibble containing the text
 
-sentiment <- get_nrc_sentiment(tweets)
+sentiment <- get_nrc_sentiment(tweets) # this uses the nrc dictionary to assign sentiment scores for each tweet
+```
+
+Now that we have a tibble with the sentiment score for each tweet, we can print
+the first results for sentiment and for tweets, if we want to compare:
+```{r}
 head(sentiment)
 head(tweets)
+```
 
+We can also see the frequency of each sentiment:
+```{r Sentiment_frequency_table}
 sentiment_sums <- sentiment %>%
   summarise_all(sum)
 
@@ -312,10 +323,16 @@ sentiment_sums = gather(sentiment, key = "S_sum") %>%
     group_by(S_sum) %>%
     summarize(number = sum(value, na.rm = TRUE))
 sentiment_sums
+```
 
-sentiment_sums'
-
-ggplot(data = sentiment_sums, aes(x = fct_reorder(S_sum, number, .desc = TRUE), y = number, fill = number)) +
+And create a bar plot with that frequency:
+```{r Sentiment_frequency_chart}
+ggplot(data = sentiment_sums,
+       aes(x = fct_reorder(S_sum,
+                           number,
+                           .desc = TRUE),
+           y = number,
+           fill = number)) +
   geom_bar(stat = "identity") +
   ylab("Count") +
   xlab("Sentiment") +
@@ -323,33 +340,136 @@ ggplot(data = sentiment_sums, aes(x = fct_reorder(S_sum, number, .desc = TRUE), 
 
 ```
 
+One other nlp task we can implement is identifying words associated with each
+"polarity" (positive and negative):
+```{r polarity_frequency}
+nrc_positive <- get_sentiments("nrc") %>%
+  filter(sentiment == "positive")
+
+tokens_words %>%
+  inner_join(nrc_positive) %>%
+  arrange(desc(N))
+
+
+```
+
+Ok, now we see that "build" is classified as a positive term, and this adds an
+unintended bias to the analysis. "Building" is classified as positive by the NRC
+dictionary (possibly because of its verb form), and this may not be true in this case.
+In this corpus, "building" is a rather descriptive word, and apparently is mostly
+used as a noun.
+
+So, let's build a chart that shows the frequency of positive terms, excluding the
+term "biuld."
+```{r polarity_frequency_chart}
+plot_positive <- tokens_words %>%
+  inner_join(nrc_positive) %>%
+  arrange(desc(N)) %>%
+  filter(N  > 50 & N < 500) %>%
+  ggplot(aes(x = fct_reorder(word, N, .desc = TRUE), y = N, fill = N)) +
+           geom_bar(stat = "identity") +
+  ylab("Count") +
+  xlab("Positive terms (stemmed)")
+
+plot_positive
+```
+And we can do the same for negative:
+```{r polarity_negative}
+nrc_negative <- get_sentiments("nrc") %>%
+  filter(sentiment == "negative")
+
+tokens_words %>%
+  inner_join(nrc_negative) %>%
+  arrange(desc(N))
+
+tokens_words %>%
+  inner_join(nrc_negative) %>%
+  arrange(desc(N)) %>%
+  filter(N  > 90) %>%
+  ggplot(aes(x = fct_reorder(word, N, .desc = TRUE), y = N, fill = N)) +
+           geom_bar(stat = "identity") +
+  ylab("Count") +
+  xlab("Negative terms (stemmed)")
+```
+Something slightly similar happens to "storm" among the negative terms: It happens
+with strikingly higher frequency than the rest of the terms, so, for this exercise,
+I'll remove set the range so that the chart includes most frequent words except for
+"storm:"
+```{r}
+plot_negative <- tokens_words %>%
+  inner_join(nrc_negative) %>%
+  arrange(desc(N)) %>%
+  filter(N  > 90& N < 500) %>%
+  ggplot(aes(x = fct_reorder(word, N, .desc = TRUE), y = N, fill = N)) +
+           geom_bar(stat = "identity") +
+  ylab("Count") +
+  xlab("Negative terms (stemmed)")
+plot_negative
+
+```
+
+As we see, the list of negative terms include words that are possibly related to
+criticism towards the "methods" of the crowd invading the capitol: they are possibly
+described as a **mob** that was **violently** **attacking**. Of course,
+more precise conclusions would require deeper analysis, but these words give a sense
+of the negative vocabulary used to describe the event.
+
+We can present both negative and positive together using ```grid.arrange()```:
+```{r sentiment_grid_arrange}
+
+plot_negative <- tokens_words %>%
+  inner_join(nrc_negative) %>%
+  arrange(desc(N)) %>%
+  filter(N  > 90 & N < 500) %>%
+  ggplot(aes(x = fct_reorder(word, N, .desc = TRUE), y = N, fill = N)) +
+           geom_bar(stat = "identity") +
+  ylab("Count") +
+  xlab("Negative terms (stemmed)") +
+  ylim(0, 300)
+
+plot_negative
+
+plot_positive <- tokens_words %>%
+  inner_join(nrc_positive) %>%
+  arrange(desc(N)) %>%
+  filter(N  > 50 & N < 500) %>%
+  ggplot(aes(x = fct_reorder(word, N, .desc = TRUE), y = N, fill = N)) +
+           geom_bar(stat = "identity") +
+  ylab("Count") +
+  xlab("Positive terms (stemmed)") +
+  ylim(0, 300)
+
+grid.arrange(plot_negative, plot_positive)
+
+```
+
 ### 4. Conclusion
 With this project, we covered three main steps in textual analysis of twitter data.
 First, we used Twitter API V2 to scrape tweets of a topic of interest within a
-time range. Second, we prepared the data by removing punctuation, stemming, and 
-stop words -- both standard ones and those which preliminary analysis had shown 
-to cause overplotting in later stages. Finally, I conduct some tasks in textual 
+time range. Second, we prepared the data by removing punctuation, stemming, and
+stop words -- both standard ones and those which preliminary analysis had shown
+to cause overplotting in later stages. Finally, I conduct some tasks in textual
 analysis. At that last stage, I first conducted an exploratory analysis by
 identifying most frequent terms in the corpus. I also used a wordcloud to offer
-an alternative visualization to word frequency. Then, I undertook two natural 
-language processing tasks: Through Latent Dirichlet Allocation, I showed two of
-the most salient topics in the data; and, finally, I plotted bi-grams, which
+an alternative visualization to word frequency. Then, I undertook natural
+language processing tasks. Through Latent Dirichlet Allocation, I showed two of
+the most salient topics in the data. Additionally, I plotted bi-grams, which
 demonstrate strength of relationship between words, and "clusters" where words
-concentrate.
+concentrate. Finally, I implemented sentiment analysis to identify terms and
+frequencies across sentiments described by the ```ncr``` dictionary.
 
-The most challennging part of carrying out this project was the handling data
+The most challenging part of carrying out this project was the handling data
 objects, and this is mainly because the object returned by the search is a dataframe
-with other dataframes nested. Because of that, saving a csv file was not as 
+with other dataframes nested. Because of that, saving a csv file was not as
 straightforward as I was used to. Therefore, it was a little confusing to define
 a strategy to deal with files: should I use a Rda file or save only the columns
-I needed as csv files? With saved files, I was not sure how they would behave 
+I needed as csv files? With saved files, I was not sure how they would behave
 when someone opened the .rmd file in another computer. I ended up sticking with the
 .rda file, because it seemed the most natural choice as a format in which files
 "carry" all the information needed for analysis.
 
 
-
-References:
+##### References:
 
 [1] https://jtr13.github.io/cc21/twitter-sentiment-analysis-in-r.html#word-frequency-plot
 
@@ -357,35 +477,8 @@ References:
 
 [3] DTM: https://bookdown.org/Maxine/tidy-text-mining/tidying-a-document-term-matrix.html
 
-[4] LDA https://blog.marketmuse.com/glossary/latent-dirichlet-allocation-definition/
+[4] LDA: https://blog.marketmuse.com/glossary/latent-dirichlet-allocation-definition/
 
-<!-- #### Wordcloud -->
-<!-- ##### Create DTM -->
-<!-- Before you create a wordcloud, you need a document-term matrix: -->
-<!-- ```{r dtm} -->
-<!-- library(wordcloud) -->
-<!-- tweets_words <-  capitol %>% -->
-<!--   select(text) %>% -->
-<!--   unnest_tokens(word, text) -->
+[5] Sentiment analysis: https://finnstats.com/index.php/2021/05/16/sentiment-analysis-in-r/
 
-<!-- words <- capitol_tokens %>% -->
-<!--   count(word, sort=TRUE) -->
-
-<!-- words -->
-
-<!-- set.seed(1234) # for reproducibility -->
-<!-- wordcloud(words$word, words$n, min.freq = 50, -->
-<!--           max.words=150, random.order=FALSE, rot.per=0.35, -->
-<!--           colors=brewer.pal(8, "Dark2")) -->
-
-<!-- #  -->
-<!-- library(tm) -->
-<!-- # install.packages("wordcloud") -->
-<!-- library(wordcloud) -->
-<!-- set.seed(1234) # for reproducibility -->
-
-<!-- # wordcloud(words = dyor_tokens$word, freq = dyor_tokens$n, min.freq = 50, -->
-<!-- #           max.words=200, random.order=FALSE, rot.per=0.35, -->
-<!-- #           colors=brewer.pal(8, "Dark2")) -->
-<!-- ``` -->
-
+[6] Sentiment analysis: https://www.tidytextmining.com/sentiment.html
