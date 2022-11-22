@@ -1,4 +1,4 @@
-Twitter textual data: scraping and analyzing
+Twitter Scrape and Sentiment Analysis
 ================
 
 # Twitter textual data: scraping and analyzing
