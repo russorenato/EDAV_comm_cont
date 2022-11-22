@@ -1,16 +1,14 @@
----
-title: "Twitter textual data: scraping and analyzing"
-author: "Renato Russo"
-date: "`r Sys.Date()`"
-output: html_document
----
+# Twitter textual data: scraping and analyzing
 
-```{r setup, include=FALSE}
+Renato Russo
+```{r, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ### Loading all the required packages
 ```{r}
+library(googlesheets4)
+library(academictwitteR)
 library(widyr)
 library(tidytext)
 library(dplyr)
@@ -56,10 +54,7 @@ it has a more straight forward connection with Twitter API V2, which we can use
 to retrieve "historical data" (the previous API allowed retrieval of data from
 the past 8-10 days only, among other limitations).
 So, let's get on with the search:
-```{r academictwitter install}
-# install.packages("academictwitteR")
-library(academictwitteR)
-```
+
 #### Set up credentials
 For this step, you will have to look at your profile on Twitter's developer portal.
 Now, go ahead and get your credentials.
@@ -68,7 +63,7 @@ and the [package repository](https://github.com/cjbarrie/academictwitteR) have
 more information on that. For now, you have to call the function `set_bearer()` to
 store that information for future use.
 ```{r bearer}
-set_bearer()
+# set_bearer()
 ```
 Once you follow the instructions above, you are ready to go ahead and run your
 query!
@@ -88,8 +83,22 @@ For the purpose of this example, I will limit the number of tweets retrieved to 
 #                                    data_path = "data", #where data is stored as series of JSON files
 #                                    n = 5000, # total number of tweets retrieved
 #                                    is_retweet = FALSE) # excluding retweets
+
 # save(capitol, file = "capitol.Rda")
-load("capitol.Rda")
+
+# load("capitol.Rda") 
+# Originally, I had saved the data as a Rda file, but for
+# submission purposes, I'm (1) saving the text content as a dataframe; (2) uploading
+# the data to a Google Spreadsheet, then (3) reading it again here. I set the 
+# sharing to "Anyone with the link."
+
+# capitol_df <- as.data.frame(capitol$text, capitol$id)
+# capitol_df_ids <- as.data.frame(capitol$id)
+# write_sheet(capitol_df)
+# write_sheet(capitol_df_ids)
+gs4_deauth()
+capitol <- as.data.frame(read_sheet("https://docs.google.com/spreadsheets/d/198TOYrrXLtUWA3WpRHrch1CBjml0a-pTEdGPXNxqr3U/edit#gid=890543988"))
+
 ```
 ### 2. Prepare data
 For this analysis, we will predominantly use the "text" column, that is, the
@@ -97,8 +106,7 @@ content of the actual tweet. We could use other data, for example number of like
 or the timeline of a user, but let's focus on the content for now.
 
 #### Removing capitalization, numbers, and punctuation.
-The custom function below is used to remove capitalization, and to remove numbers and
-punctuation:
+The custom function below is used to remove capitalization, and to remove numbers and punctuation:
 ```{r data cleaning function}
 # First, we define the function
 clean_text <- function(text) {
@@ -349,7 +357,7 @@ nrc_positive <- get_sentiments("nrc") %>%
 tokens_words %>%
   inner_join(nrc_positive) %>%
   arrange(desc(N))
-
+  
 
 ```
 
